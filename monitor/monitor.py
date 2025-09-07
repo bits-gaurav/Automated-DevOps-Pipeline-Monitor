@@ -84,9 +84,18 @@ def format_failure_block(run):
 def analyze(runs):
     subset = runs[:30]  # last 30 runs
     
+    # Debug: print detailed info about each run
+    print(f"Debug - Total runs analyzed: {len(subset)}")
+    for i, r in enumerate(subset[:10]):  # Show first 10 runs
+        print(f"Run {i+1}: status={r.get('status')}, conclusion={r.get('conclusion')}, name={r.get('name')}")
+    
     # Debug: print conclusions to understand what we're getting
     conclusions = [r.get("conclusion") for r in subset]
-    print(f"Debug - Conclusions found: {set(conclusions)}")
+    statuses = [r.get("status") for r in subset]
+    print(f"Debug - All conclusions: {conclusions}")
+    print(f"Debug - All statuses: {statuses}")
+    print(f"Debug - Unique conclusions: {set(conclusions)}")
+    print(f"Debug - Unique statuses: {set(statuses)}")
     
     # Success: conclusion is "success"
     succ = [r for r in subset if r.get("conclusion") == "success"]
@@ -97,6 +106,10 @@ def analyze(runs):
     print(f"Debug - Success count: {len(succ)}, Failure count: {len(fail)}")
     print(f"Debug - Success conclusions: {[r.get('conclusion') for r in succ]}")
     print(f"Debug - Failure conclusions: {[r.get('conclusion') for r in fail]}")
+    
+    # Also check for runs that might still be in progress
+    in_progress = [r for r in subset if r.get("status") != "completed"]
+    print(f"Debug - In progress runs: {len(in_progress)}")
 
     # average duration (mins)
     durations = []
