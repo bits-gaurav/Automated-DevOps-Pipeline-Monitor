@@ -1,4 +1,4 @@
-name: Automated CICD Pipeline
+name: CICD Pipeline
 
 on:
   push:
