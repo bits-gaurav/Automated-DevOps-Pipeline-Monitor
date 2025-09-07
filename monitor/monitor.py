@@ -83,8 +83,20 @@ def format_failure_block(run):
 
 def analyze(runs):
     subset = runs[:30]  # last 30 runs
+    
+    # Debug: print conclusions to understand what we're getting
+    conclusions = [r.get("conclusion") for r in subset]
+    print(f"Debug - Conclusions found: {set(conclusions)}")
+    
+    # Success: conclusion is "success"
     succ = [r for r in subset if r.get("conclusion") == "success"]
-    fail = [r for r in subset if r.get("conclusion") == "failure"]
+    
+    # Failure: conclusion is "failure", "cancelled", "timed_out", or any non-success
+    fail = [r for r in subset if r.get("conclusion") in ["failure", "cancelled", "timed_out"]]
+    
+    print(f"Debug - Success count: {len(succ)}, Failure count: {len(fail)}")
+    print(f"Debug - Success conclusions: {[r.get('conclusion') for r in succ]}")
+    print(f"Debug - Failure conclusions: {[r.get('conclusion') for r in fail]}")
 
     # average duration (mins)
     durations = []
@@ -99,7 +111,7 @@ def analyze(runs):
     # MTTR (mins): for each failure, time until the next success after it
     mttrs = []
     for i, fr in enumerate(subset):
-        if fr.get("conclusion") != "failure":
+        if fr.get("conclusion") not in ["failure", "cancelled", "timed_out"]:
             continue
         ftime = parser.isoparse(fr["updated_at"]) if fr.get("updated_at") else None
         if not ftime:
