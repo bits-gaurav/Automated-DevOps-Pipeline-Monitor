@@ -93,7 +93,7 @@ jobs:
           crane cp "${IMAGE_REF}:${IMAGE_TAG}" "${IMAGE_REF}:current"
 
       - name: Identify triggering user
-        if: github.ref == 'refs/heads/main'
+        if: always() && github.ref == 'refs/heads/main'
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_USER: ${{ github.event.pull_request.user.login }}
@@ -209,7 +209,7 @@ jobs:
               "blocks": [
                 { "type": "section", "text": { "type": "mrkdwn", "text": "*🚨 Deploy failed* for `${{ github.repository }}@${{ github.sha }}`. Auto-rollback executed to *:previous*." } },
                 { "type": "context", "elements": [
-                    { "type": "mrkdwn", "text": "*Triggered by:* ${{ env.BUILD_USER }}" },
+                    { "type": "mrkdwn", "text": "*Triggered by:* ${{ env.BUILD_USER || github.actor }}" },
                     { "type": "mrkdwn", "text": "*Branch:* `${{ github.ref_name }}`" },
                     { "type": "mrkdwn", "text": "*Workflow:* `${{ github.workflow }}` · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Run #${{ github.run_number }}>" }
                 ]}
