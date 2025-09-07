@@ -110,12 +110,36 @@ jobs:
             exit 1
           fi
 
+      - name: Identify triggering user
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PUSHER_NAME: ${{ github.event.pusher.name }}
+          ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          # Prefer PR author, then push pusher name, then fallback to the actor
+          USER="${PR_USER:-$PUSHER_NAME}"
+          USER="${USER:-$ACTOR}"
+          echo "BUILD_USER=$USER" >> "$GITHUB_ENV"
+          echo "Computed BUILD_USER=$USER"
+        
       - name: Notify Slack (success)
         if: success() && github.ref == 'refs/heads/main'
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: |
-            {"text": "✅ Deploy succeeded for ${{ github.repository }}@${{ github.sha }}"}
+            {
+              "text": "✅ Deploy succeeded for ${{ github.repository }}@${{ github.sha }}",
+              "blocks": [
+                { "type": "section", "text": { "type": "mrkdwn", "text": "*✅ Deploy succeeded* for `${{ github.repository }}@${{ github.sha }}`" } },
+                { "type": "context", "elements": [
+                    { "type": "mrkdwn", "text": "*Triggered by:* ${{ env.BUILD_USER }}" },
+                    { "type": "mrkdwn", "text": "*Branch:* `${{ github.ref_name }}`" },
+                    { "type": "mrkdwn", "text": "*Workflow:* `${{ github.workflow }}` · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Run #${{ github.run_number }}>" }
+                ]}
+              ]
+            }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
@@ -137,7 +161,17 @@ jobs:
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: |
-            {"text": "🚨 Deploy failed for ${{ github.repository }}@${{ github.sha }}. Auto-rollback executed to previous image."}
+            {
+              "text": "🚨 Deploy failed for ${{ github.repository }}@${{ github.sha }}. Auto-rollback executed to previous image.",
+              "blocks": [
+                { "type": "section", "text": { "type": "mrkdwn", "text": "*🚨 Deploy failed* for `${{ github.repository }}@${{ github.sha }}`. Auto-rollback executed to *:previous*." } },
+                { "type": "context", "elements": [
+                    { "type": "mrkdwn", "text": "*Triggered by:* ${{ env.BUILD_USER }}" },
+                    { "type": "mrkdwn", "text": "*Branch:* `${{ github.ref_name }}`" },
+                    { "type": "mrkdwn", "text": "*Workflow:* `${{ github.workflow }}` · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Run #${{ github.run_number }}>" }
+                ]}
+              ]
+            }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
