@@ -13,6 +13,6 @@ async def index():
 
 @app.get("/health")
 async def health():
-    if os.getenv("FAIL_HEALTHCHECK", "false").lower() == "true":
+    if os.getenv("FAIL_HEALTHCHECK", "false").lower() == "false":
         return JSONResponse({"status": "unhealthy"}, status_code=500)
     return {"status": "ok"}
