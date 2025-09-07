@@ -1,8 +1,12 @@
-name: Deploy
+name: CI + Deploy + Rollback
 
 on:
   push:
-    branches: [ "main" ]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,25 +18,40 @@ env:
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  deploy:
+  pipeline:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # ---------- CI: build & basic health test (always runs) ----------
+      - name: Build app image
+        run: docker build -t demo-app:ci -f app/Dockerfile app
+
+      - name: Run healthcheck (FastAPI /health)
+        run: |
+          cid=$(docker run -d -p 8080:8080 demo-app:ci)
+          sleep 3
+          curl -f http://localhost:8080/health
+          docker rm -f $cid
+
+      # ---------- Deploy steps (only on main branch) ----------
       - name: Login to GHCR
+        if: github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install crane (for retag/copy in registry)
+      - name: Install crane (for tag copy)
+        if: github.ref == 'refs/heads/main'
         uses: imjasonh/setup-crane@v0.4
 
       - name: Snapshot current → previous (if exists)
+        if: github.ref == 'refs/heads/main'
         run: |
           set -e
           IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -44,6 +63,7 @@ jobs:
           fi
 
       - name: Build & push new image
+        if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
         with:
           context: app
@@ -53,10 +73,12 @@ jobs:
             ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
       - name: Advance :current to new image
+        if: github.ref == 'refs/heads/main'
         run: |
           crane cp ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} ghcr.io/${{ env.IMAGE_NAME }}:current
 
       - name: Post-deploy health check
+        if: github.ref == 'refs/heads/main'
         id: health
         run: |
           set -e
@@ -75,7 +97,7 @@ jobs:
           fi
 
       - name: Notify Slack (success)
-        if: success()
+        if: success() && github.ref == 'refs/heads/main'
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: |
@@ -85,7 +107,7 @@ jobs:
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
       - name: Rollback on failure
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main'
         run: |
           set -e
           IMAGE=ghcr.io/${{ env.IMAGE_NAME }}
@@ -97,7 +119,7 @@ jobs:
           fi
 
       - name: Notify Slack (failure/rollback)
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main'
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: |
