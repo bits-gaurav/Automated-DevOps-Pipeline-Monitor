@@ -40,8 +40,20 @@ def slack_post(text: str, blocks=None):
     payload = {"text": text}
     if blocks:
         payload["blocks"] = blocks
-    r = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=20)
-    r.raise_for_status()
+    
+    try:
+        r = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=20)
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print(f"Slack webhook error: {e}")
+        print(f"Response status: {r.status_code}")
+        print(f"Response text: {r.text}")
+        print(f"Payload sent: {payload}")
+        # Don't re-raise to avoid failing the entire workflow
+        print("Continuing without Slack notification...")
+    except Exception as e:
+        print(f"Unexpected error sending to Slack: {e}")
+        print("Continuing without Slack notification...")
 
 
 def format_failure_block(run):
