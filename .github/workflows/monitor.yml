@@ -1,0 +1,39 @@
+name: Pipeline Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch: {}
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build monitor image
+        uses: docker/build-push-action@v6
+        with:
+          context: monitor
+          file: monitor/Dockerfile
+          push: false
+          tags: pipeline-monitor:latest
+
+      - name: Run monitor
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          LOOKBACK_MINUTES: '10'
+          SEND_ANALYTICS: 'true'
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          docker run --rm \
+            -e GITHUB_OWNER="$OWNER" \
+            -e GITHUB_REPO="$REPO" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            -e SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
+            -e LOOKBACK_MINUTES="$LOOKBACK_MINUTES" \
+            -e SEND_ANALYTICS="$SEND_ANALYTICS" \
+            pipeline-monitor:latest
