@@ -92,6 +92,21 @@ jobs:
         run: |
           crane cp "${IMAGE_REF}:${IMAGE_TAG}" "${IMAGE_REF}:current"
 
+      - name: Identify triggering user
+        if: github.ref == 'refs/heads/main'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PUSHER_NAME: ${{ github.event.pusher.name }}
+          ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          # Prefer PR author, then push pusher name, then fallback to the actor
+          USER="${PR_USER:-$PUSHER_NAME}"
+          USER="${USER:-$ACTOR}"
+          echo "BUILD_USER=$USER" >> "$GITHUB_ENV"
+          echo "Computed BUILD_USER=$USER"
+
       - name: Post-deploy health check
         if: github.ref == 'refs/heads/main'
         id: health
@@ -109,20 +124,6 @@ jobs:
             echo "health=fail" >> $GITHUB_OUTPUT
             exit 1
           fi
-
-      - name: Identify triggering user
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_USER: ${{ github.event.pull_request.user.login }}
-          PUSHER_NAME: ${{ github.event.pusher.name }}
-          ACTOR: ${{ github.actor }}
-        shell: bash
-        run: |
-          # Prefer PR author, then push pusher name, then fallback to the actor
-          USER="${PR_USER:-$PUSHER_NAME}"
-          USER="${USER:-$ACTOR}"
-          echo "BUILD_USER=$USER" >> "$GITHUB_ENV"
-          echo "Computed BUILD_USER=$USER"
         
       - name: Notify Slack (success)
         if: success() && github.ref == 'refs/heads/main'
