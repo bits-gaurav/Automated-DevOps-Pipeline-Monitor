@@ -144,16 +144,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      - name: Send workflow analytics
-        if: success() && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v6
-        with:
-          context: monitor
-          file: monitor/Dockerfile
-          push: false
-          tags: pipeline-monitor:latest
-
-      - name: Run analytics and send to Slack
+      - name: Build and run workflow analytics
         if: success() && github.ref == 'refs/heads/main'
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -164,6 +155,7 @@ jobs:
         run: |
           OWNER="${GITHUB_REPOSITORY%%/*}"
           REPO="${GITHUB_REPOSITORY##*/}"
+          docker build -t pipeline-monitor:latest monitor
           docker run --rm \
             -e GITHUB_OWNER="$OWNER" \
             -e GITHUB_REPO="$REPO" \
@@ -185,16 +177,7 @@ jobs:
             echo "No :previous tag to rollback to."
           fi
 
-      - name: Build monitor image (failure analytics)
-        if: failure() && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v6
-        with:
-          context: monitor
-          file: monitor/Dockerfile
-          push: false
-          tags: pipeline-monitor:latest
-
-      - name: Send failure analytics to Slack
+      - name: Build and run failure analytics
         if: failure() && github.ref == 'refs/heads/main'
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -205,6 +188,7 @@ jobs:
         run: |
           OWNER="${GITHUB_REPOSITORY%%/*}"
           REPO="${GITHUB_REPOSITORY##*/}"
+          docker build -t pipeline-monitor:latest monitor
           docker run --rm \
             -e GITHUB_OWNER="$OWNER" \
             -e GITHUB_REPO="$REPO" \
