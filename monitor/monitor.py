@@ -97,11 +97,15 @@ def analyze(runs):
     print(f"Debug - Unique conclusions: {set(conclusions)}")
     print(f"Debug - Unique statuses: {set(statuses)}")
     
-    # Success: conclusion is "success"
-    succ = [r for r in subset if r.get("conclusion") == "success"]
+    # Only count completed runs for accurate analytics
+    completed_runs = [r for r in subset if r.get("status") == "completed"]
+    print(f"Debug - Completed runs: {len(completed_runs)} out of {len(subset)} total")
     
-    # Failure: conclusion is "failure", "cancelled", "timed_out", or any non-success
-    fail = [r for r in subset if r.get("conclusion") in ["failure", "cancelled", "timed_out"]]
+    # Success: conclusion is "success" AND status is "completed"
+    succ = [r for r in completed_runs if r.get("conclusion") == "success"]
+    
+    # Failure: conclusion is "failure", "cancelled", "timed_out" AND status is "completed"
+    fail = [r for r in completed_runs if r.get("conclusion") in ["failure", "cancelled", "timed_out"]]
     
     print(f"Debug - Success count: {len(succ)}, Failure count: {len(fail)}")
     print(f"Debug - Success conclusions: {[r.get('conclusion') for r in succ]}")
