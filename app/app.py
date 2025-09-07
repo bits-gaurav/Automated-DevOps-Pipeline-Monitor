@@ -8,7 +8,7 @@ app = FastAPI()
 
 @app.get("/")
 async def index():
-    return PlainTextResponse("Hello from demo app! Test")
+    return PlainTextResponse("Hello from demo app!")
 
 
 @app.get("/health")
