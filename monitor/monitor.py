@@ -86,20 +86,28 @@ def analyze(runs):
     
     # Debug: print detailed info about each run
     print(f"Debug - Total runs analyzed: {len(subset)}")
-    for i, r in enumerate(subset[:10]):  # Show first 10 runs
-        print(f"Run {i+1}: status={r.get('status')}, conclusion={r.get('conclusion')}, name={r.get('name')}")
+    print(f"Debug - All workflow names: {[r.get('name') for r in subset]}")
+    
+    # Filter out monitor workflows to avoid counting ourselves
+    filtered_runs = [r for r in subset if r.get("name") not in ["Monitor Workflows", "monitor"]]
+    print(f"Debug - Runs after filtering monitor workflows: {len(filtered_runs)}")
+    
+    for i, r in enumerate(filtered_runs[:10]):  # Show first 10 runs
+        created_at = r.get('created_at', 'N/A')
+        updated_at = r.get('updated_at', 'N/A')
+        print(f"Run {i+1}: name='{r.get('name')}', status={r.get('status')}, conclusion={r.get('conclusion')}, created={created_at}, updated={updated_at}")
     
     # Debug: print conclusions to understand what we're getting
-    conclusions = [r.get("conclusion") for r in subset]
-    statuses = [r.get("status") for r in subset]
+    conclusions = [r.get("conclusion") for r in filtered_runs]
+    statuses = [r.get("status") for r in filtered_runs]
     print(f"Debug - All conclusions: {conclusions}")
     print(f"Debug - All statuses: {statuses}")
     print(f"Debug - Unique conclusions: {set(conclusions)}")
     print(f"Debug - Unique statuses: {set(statuses)}")
     
     # Only count completed runs for accurate analytics
-    completed_runs = [r for r in subset if r.get("status") == "completed"]
-    print(f"Debug - Completed runs: {len(completed_runs)} out of {len(subset)} total")
+    completed_runs = [r for r in filtered_runs if r.get("status") == "completed"]
+    print(f"Debug - Completed runs: {len(completed_runs)} out of {len(filtered_runs)} filtered runs")
     
     # Success: conclusion is "success" AND status is "completed"
     succ = [r for r in completed_runs if r.get("conclusion") == "success"]
@@ -108,12 +116,17 @@ def analyze(runs):
     fail = [r for r in completed_runs if r.get("conclusion") in ["failure", "cancelled", "timed_out"]]
     
     print(f"Debug - Success count: {len(succ)}, Failure count: {len(fail)}")
-    print(f"Debug - Success conclusions: {[r.get('conclusion') for r in succ]}")
-    print(f"Debug - Failure conclusions: {[r.get('conclusion') for r in fail]}")
+    print(f"Debug - Success runs: {[(r.get('name'), r.get('conclusion')) for r in succ]}")
+    print(f"Debug - Failure runs: {[(r.get('name'), r.get('conclusion')) for r in fail]}")
     
     # Also check for runs that might still be in progress
-    in_progress = [r for r in subset if r.get("status") != "completed"]
+    in_progress = [r for r in filtered_runs if r.get("status") != "completed"]
     print(f"Debug - In progress runs: {len(in_progress)}")
+    if in_progress:
+        print(f"Debug - In progress run details: {[(r.get('name'), r.get('status')) for r in in_progress]}")
+    
+    # Use filtered_runs for calculations instead of subset
+    subset = filtered_runs
 
     # average duration (mins)
     durations = []
