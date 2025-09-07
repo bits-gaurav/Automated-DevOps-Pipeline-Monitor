@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/demo-app
+  #IMAGE_NAME: ${{ github.repository }}/demo-app
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -37,12 +37,22 @@ jobs:
           curl -f http://localhost:8080/health
           docker rm -f $cid
 
-      # 🔽 NEW: compute lowercase image ref
+      # Compute LOWERCASE image ref once and export for later steps
       - name: Compute lowercase image ref
         run: |
-          REPO_LC="${GITHUB_REPOSITORY,,}"                 # lower-case
-          echo "IMAGE_REF=${{ env.REGISTRY }}/${REPO_LC}/demo-app" >> $GITHUB_ENV
-          echo "Computed IMAGE_REF=$IMAGE_REF"
+          REPO_LC="${GITHUB_REPOSITORY,,}"                           # lower-case owner/repo
+          IMAGE_REF="${REGISTRY}/${REPO_LC}/demo-app"                # ghcr.io/<owner>/<repo>/demo-app
+          echo "IMAGE_REF=$IMAGE_REF" >> "$GITHUB_ENV"
+          echo "Computed IMAGE_REF=$IMAGE_REF"    
+
+      # Show & validate the computed image ref (must be lowercase)
+      - name: Check image ref is lowercase
+        run: |
+          echo "IMAGE_REF=${IMAGE_REF}"
+          if [[ "$IMAGE_REF" =~ [A-Z] ]]; then
+            echo "ERROR: IMAGE_REF contains uppercase"
+            exit 1
+          fi
 
       # ---------- Deploy steps (only on main branch) ----------
       - name: Login to GHCR
