@@ -144,6 +144,35 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
+      - name: Send workflow analytics
+        if: success() && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: monitor
+          file: monitor/Dockerfile
+          push: false
+          tags: pipeline-monitor:latest
+
+      - name: Run analytics and send to Slack
+        if: success() && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          LOOKBACK_MINUTES: '1440'  # 24 hours for deployment analytics
+          SEND_ANALYTICS: 'true'
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          docker run --rm \
+            -e GITHUB_OWNER="$OWNER" \
+            -e GITHUB_REPO="$REPO" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            -e SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
+            -e LOOKBACK_MINUTES="$LOOKBACK_MINUTES" \
+            -e SEND_ANALYTICS="$SEND_ANALYTICS" \
+            pipeline-monitor:latest
+
       - name: Rollback on failure
         if: failure() && github.ref == 'refs/heads/main'
         run: |
@@ -155,6 +184,35 @@ jobs:
           else
             echo "No :previous tag to rollback to."
           fi
+
+      - name: Build monitor image (failure analytics)
+        if: failure() && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: monitor
+          file: monitor/Dockerfile
+          push: false
+          tags: pipeline-monitor:latest
+
+      - name: Send failure analytics to Slack
+        if: failure() && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          LOOKBACK_MINUTES: '1440'  # 24 hours for failure context
+          SEND_ANALYTICS: 'true'
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          docker run --rm \
+            -e GITHUB_OWNER="$OWNER" \
+            -e GITHUB_REPO="$REPO" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            -e SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
+            -e LOOKBACK_MINUTES="$LOOKBACK_MINUTES" \
+            -e SEND_ANALYTICS="$SEND_ANALYTICS" \
+            pipeline-monitor:latest
 
       - name: Notify Slack (failure/rollback)
         if: failure() && github.ref == 'refs/heads/main'
