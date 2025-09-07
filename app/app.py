@@ -13,6 +13,9 @@ async def index():
 
 @app.get("/health")
 async def health():
-    if os.getenv("FAIL_HEALTHCHECK", "true").lower() == "true":
+    # Set this to True to intentionally fail the pipeline for testing
+    FORCE_FAILURE = False
+    
+    if FORCE_FAILURE:
         return JSONResponse({"status": "unhealthy"}, status_code=500)
     return {"status": "ok"}
