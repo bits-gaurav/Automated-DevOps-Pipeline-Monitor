@@ -14,7 +14,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  #IMAGE_NAME: ${{ github.repository }}/demo-app
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -37,22 +36,21 @@ jobs:
           curl -f http://localhost:8080/health
           docker rm -f $cid
 
-      # Compute LOWERCASE image ref once and export for later steps
+      # Compute LOWERCASE image ref and export for later steps
       - name: Compute lowercase image ref
+        shell: bash
         run: |
-          REPO_LC="${GITHUB_REPOSITORY,,}"                           # lower-case owner/repo
-          IMAGE_REF="${REGISTRY}/${REPO_LC}/demo-app"                # ghcr.io/<owner>/<repo>/demo-app
+          REPO_LC="${GITHUB_REPOSITORY,,}"                         # lower-case owner/repo
+          IMAGE_REF="${REGISTRY}/${REPO_LC}/demo-app"              # ghcr.io/<owner>/<repo>/demo-app
           echo "IMAGE_REF=$IMAGE_REF" >> "$GITHUB_ENV"
-          echo "Computed IMAGE_REF=$IMAGE_REF"    
+          echo "Computed IMAGE_REF=$IMAGE_REF"
 
-      # Show & validate the computed image ref (must be lowercase)
-      - name: Check image ref is lowercase
+      # Sanity check that it's lowercase and non-empty
+      - name: Check image ref
         run: |
           echo "IMAGE_REF=${IMAGE_REF}"
-          if [[ "$IMAGE_REF" =~ [A-Z] ]]; then
-            echo "ERROR: IMAGE_REF contains uppercase"
-            exit 1
-          fi
+          if [[ -z "$IMAGE_REF" ]]; then echo "ERROR: IMAGE_REF is empty"; exit 1; fi
+          if [[ "$IMAGE_REF" =~ [A-Z] ]]; then echo "ERROR: IMAGE_REF contains uppercase"; exit 1; fi
 
       # ---------- Deploy steps (only on main branch) ----------
       - name: Login to GHCR
@@ -71,10 +69,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           set -e
-          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          if crane ls $IMAGE | grep -q "^current$" ; then
+          IMAGE="${IMAGE_REF}"
+          if crane ls "$IMAGE" | grep -q "^current$" ; then
             echo "Tagging current → previous"
-            crane cp $IMAGE:current $IMAGE:previous
+            crane cp "$IMAGE:current" "$IMAGE:previous"
           else
             echo "No :current tag yet; skipping previous snapshot."
           fi
@@ -87,22 +85,21 @@ jobs:
           file: app/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_REF }}:${{ env.IMAGE_TAG }}
 
       - name: Advance :current to new image
         if: github.ref == 'refs/heads/main'
         run: |
-          crane cp ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} ghcr.io/${{ env.IMAGE_NAME }}:current
+          crane cp "${IMAGE_REF}:${IMAGE_TAG}" "${IMAGE_REF}:current"
 
       - name: Post-deploy health check
         if: github.ref == 'refs/heads/main'
         id: health
         run: |
           set -e
-          docker pull ghcr.io/${{ env.IMAGE_NAME }}:current
-          # You can toggle this repo variable to simulate failure
+          docker pull "${IMAGE_REF}:current"
           FAIL=${{ vars.FAIL_HEALTHCHECK }}
-          cid=$(docker run -d -p 8080:8080 -e FAIL_HEALTHCHECK=$FAIL ghcr.io/${{ env.IMAGE_NAME }}:current)
+          cid=$(docker run -d -p 8080:8080 -e FAIL_HEALTHCHECK=$FAIL "${IMAGE_REF}:current")
           sleep 3
           set +e
           curl -f http://localhost:8080/health
@@ -127,9 +124,9 @@ jobs:
         if: failure() && github.ref == 'refs/heads/main'
         run: |
           set -e
-          IMAGE=ghcr.io/${{ env.IMAGE_NAME }}
-          if crane ls $IMAGE | grep -q "^previous$" ; then
-            crane cp $IMAGE:previous $IMAGE:current
+          IMAGE="${IMAGE_REF}"
+          if crane ls "$IMAGE" | grep -q "^previous$" ; then
+            crane cp "$IMAGE:previous" "$IMAGE:current"
             echo "Rolled back :current to :previous"
           else
             echo "No :previous tag to rollback to."
