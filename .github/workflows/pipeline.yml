@@ -78,7 +78,7 @@ jobs:
           (crane ls "${IMAGE_REF}" || echo "(repo may not exist yet)") || true        
 
       - name: Snapshot stable/current → previous (if exists)
-        if: github.ref == 'refs/heads/main'
+        if: always() && github.ref == 'refs/heads/main'
         run: |
           set -e
           IMAGE="${IMAGE_REF}"
