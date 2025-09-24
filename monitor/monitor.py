@@ -89,7 +89,7 @@ def _parse_ts(ts):
         return None
 
 def analyze(runs):
-    # 1) Exclude the monitor workflow itself by name (as you already did)
+    # 1) Exclude the monitor workflow itself by name
     ci_cd_runs = [r for r in runs if r.get("name") not in ["Monitor Workflows", "monitor", "Monitor"]]
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=LOOKBACK_MINUTES)
     ci_cd_runs = [r for r in ci_cd_runs if _parse_ts(r.get("updated_at")) and _parse_ts(r["updated_at"]) >= cutoff]
@@ -124,7 +124,7 @@ def analyze(runs):
     # 4) Only completed runs count for S/F
     completed = [r for r in subset if r.get("status") == "completed"]
 
-    # 5) Count outcomes (optionally include cancelled in failures)
+    # 5) Count outcomes
     successes = [r for r in completed if r.get("conclusion") == "success"]
     failure_states = {"failure", "timed_out"}
     if INCLUDE_CANCELLED:
