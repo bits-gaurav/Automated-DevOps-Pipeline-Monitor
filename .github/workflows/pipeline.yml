@@ -38,6 +38,7 @@ jobs:
 
       # Compute LOWERCASE image ref and export for later steps
       - name: Compute lowercase image ref
+        if: always() 
         shell: bash
         run: |
           REPO_LC="${GITHUB_REPOSITORY,,}"                         # lower-case owner/repo
@@ -62,11 +63,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install crane (for tag copy)
-        if: github.ref == 'refs/heads/main'
+        if: always() && github.ref == 'refs/heads/main'
         uses: imjasonh/setup-crane@v0.4
 
+      - name: Verify crane is available
+        if: always() && github.ref == 'refs/heads/main'   # ← new (debug)
+        run: crane version  
+
       - name: Debug- list existing tags
-        if: github.ref == 'refs/heads/main'
+        if: always() && github.ref == 'refs/heads/main'
         run: |
           set -e
           echo "Listing tags for ${IMAGE_REF}..."
