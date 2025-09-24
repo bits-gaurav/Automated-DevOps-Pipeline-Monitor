@@ -175,6 +175,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ANALYTICS_WEBHOOK_URL }}
           LOOKBACK_MINUTES: '1440'  # 24 hours for deployment analytics
           SEND_ANALYTICS: 'true'
+          INCLUDE_CANCELLED: 'false'
         run: |
           OWNER="${GITHUB_REPOSITORY%%/*}"
           REPO="${GITHUB_REPOSITORY##*/}"

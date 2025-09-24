@@ -10,6 +10,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 LOOKBACK_MINUTES = int(os.getenv("LOOKBACK_MINUTES", "10"))
 SEND_ANALYTICS = os.getenv("SEND_ANALYTICS", "true").lower() == "true"
+INCLUDE_CANCELLED = os.getenv("INCLUDE_CANCELLED", "false").lower() == "true"
 
 HEADERS = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
@@ -81,19 +82,37 @@ def format_failure_block(run):
     ]
 
 
+def _parse_ts(ts):
+    try:
+        return parser.isoparse(ts) if ts else None
+    except Exception:
+        return None
+
 def analyze(runs):
-    # Filter out monitor workflows first to avoid counting ourselves
+    # 1) Exclude the monitor workflow itself by name (as you already did)
     ci_cd_runs = [r for r in runs if r.get("name") not in ["Monitor Workflows", "monitor", "Monitor"]]
-    
-    # Take last 30 CI/CD runs for analysis
-    subset = ci_cd_runs[:30]
-    
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=LOOKBACK_MINUTES)
+    ci_cd_runs = [r for r in ci_cd_runs if _parse_ts(r.get("updated_at")) and _parse_ts(r["updated_at"]) >= cutoff]
+
+
+    # 2) Sort newest first and keep only the latest run per commit (head_sha)
+    ci_cd_runs.sort(key=lambda r: _parse_ts(r.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    latest_by_sha = {}
+    for r in ci_cd_runs:
+        sha = r.get("head_sha")
+        if sha and sha not in latest_by_sha:
+            latest_by_sha[sha] = r
+    deduped = list(latest_by_sha.values())
+
+    # 3) Consider only the most recent N after dedupe
+    subset = deduped[:30]
+
     print(f"Analytics - Total workflow runs fetched: {len(runs)}")
     print(f"Analytics - CI/CD runs (excluding monitor): {len(ci_cd_runs)}")
-    print(f"Analytics - Analyzing last {len(subset)} CI/CD runs")
-    
+    print(f"Analytics - After dedupe by head_sha: {len(deduped)}")
+    print(f"Analytics - Analyzing last {len(subset)} CI/CD runs (deduped)")
+
     if not subset:
-        print("Analytics - No CI/CD runs found to analyze")
         return {
             "window": 0,
             "successes": 0,
@@ -101,58 +120,49 @@ def analyze(runs):
             "avg_duration_min": None,
             "mttr_min": None,
         }
-    
-    # Show workflow names being analyzed
-    workflow_names = list(set([r.get('name') for r in subset]))
-    print(f"Analytics - Workflow types: {workflow_names}")
-    
-    # Only count completed runs for accurate analytics
-    completed_runs = [r for r in subset if r.get("status") == "completed"]
-    print(f"Analytics - Completed runs: {len(completed_runs)} out of {len(subset)} total")
-    
-    # Count successes and failures
-    successes = [r for r in completed_runs if r.get("conclusion") == "success"]
-    failures = [r for r in completed_runs if r.get("conclusion") in ["failure", "cancelled", "timed_out"]]
-    
+
+    # 4) Only completed runs count for S/F
+    completed = [r for r in subset if r.get("status") == "completed"]
+
+    # 5) Count outcomes (optionally include cancelled in failures)
+    successes = [r for r in completed if r.get("conclusion") == "success"]
+    failure_states = {"failure", "timed_out"}
+    if INCLUDE_CANCELLED:
+        failure_states.add("cancelled")
+    failures = [r for r in completed if r.get("conclusion") in failure_states]
+
     print(f"Analytics - Success: {len(successes)}, Failures: {len(failures)}")
-    
-    # Show recent runs for verification
-    print("Analytics - Recent runs:")
+
+    # 6) Show a few for sanity
+    print("Analytics - Recent (deduped) runs:")
     for i, r in enumerate(subset[:5]):
         print(f"  {i+1}. {r.get('name')} - {r.get('status')} - {r.get('conclusion')} - {r.get('updated_at', 'N/A')[:19]}")
-    
-    # Use completed_runs for calculations
-    subset = completed_runs
 
-    # average duration (mins)
+    # 7) Average duration (mins) using completed runs only
     durations = []
-    for r in subset:
-        s = r.get("run_started_at")
-        u = r.get("updated_at")
+    for r in completed:
+        s = _parse_ts(r.get("run_started_at"))
+        u = _parse_ts(r.get("updated_at"))
         if s and u:
-            s, u = parser.isoparse(s), parser.isoparse(u)
             durations.append((u - s).total_seconds())
     avg = round(sum(durations) / len(durations) / 60.0, 2) if durations else None
 
-    # MTTR (mins): for each failure, time until the next success after it
+    # 8) MTTR: for each failure, time to the next success AFTER it (within completed set)
     mttrs = []
-    for i, fr in enumerate(subset):
-        if fr.get("conclusion") not in ["failure", "cancelled", "timed_out"]:
+    for fr in completed:
+        if fr.get("conclusion") not in failure_states:
             continue
-        ftime = parser.isoparse(fr["updated_at"]) if fr.get("updated_at") else None
+        ftime = _parse_ts(fr.get("updated_at"))
         if not ftime:
             continue
-        for sr in subset:
-            if sr.get("conclusion") != "success":
-                continue
-            stime = parser.isoparse(sr["updated_at"]) if sr.get("updated_at") else None
-            if stime and stime > ftime:
-                mttrs.append((stime - ftime).total_seconds())
-                break
+        later_successes = [sr for sr in completed if sr.get("conclusion") == "success" and _parse_ts(sr.get("updated_at")) and _parse_ts(sr["updated_at"]) > ftime]
+        if later_successes:
+            stime = min(_parse_ts(sr["updated_at"]) for sr in later_successes)
+            mttrs.append((stime - ftime).total_seconds())
     mttr = round(sum(mttrs) / len(mttrs) / 60.0, 2) if mttrs else None
 
     return {
-        "window": len(subset),
+        "window": len(completed),      # number of completed runs in the analyzed window
         "successes": len(successes),
         "failures": len(failures),
         "avg_duration_min": avg,
